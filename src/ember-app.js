@@ -192,6 +192,11 @@ class EmberApp {
       this.app.destroy();
     }
 
+    if (this.instance) {
+      this.instance = null;
+    }
+
+    this.bootOptions = null;
     this.sandbox = null;
   }
 
@@ -212,9 +217,8 @@ class EmberApp {
   /**
    * @private
    *
-   * Main funtion that creates the app instance for every `visit` request, boots
-   * the app instance and then visits the given route and destroys the app instance
-   * when the route is finished its render cycle.
+   * Main funtion that creates the app instance for the first `visit` request, boots
+   * the app instance and then visits the given route. This persists the app instance between visits.
    *
    * @param {string} path the URL path to render, like `/photos/1`
    * @param {Object} fastbootInfo An object holding per request info
@@ -225,27 +229,47 @@ class EmberApp {
    */
   visitRoute(path, fastbootInfo, bootOptions, result) {
     let instance;
+    let scope = this;
 
-    return this.buildAppInstance()
-      .then(appInstance => {
-        instance = appInstance;
-        result.instance = instance;
-        registerFastBootInfo(fastbootInfo, instance);
+    if (scope.instance) {
+      instance = scope.instance;
+      result.instance = instance;
+      registerFastBootInfo(fastbootInfo, instance);
+      result.instanceBooted = true;
+      return instance.visit(path, bootOptions)
+        .then(() => {
+          result.instance = instance;
+          registerFastBootInfo(fastbootInfo, instance);
+        })
+        .then(() => waitForApp(instance))
+        .then(() => {
+          scope.instance = instance;
+          return instance;
+        });
+    } else {
+      return this.buildAppInstance()
+        .then(appInstance => {
+          instance = appInstance;
+          result.instance = instance;
+          registerFastBootInfo(fastbootInfo, instance);
 
-        return instance.boot(bootOptions);
-      })
-      .then(() => result.instanceBooted = true)
-      .then(() => instance.visit(path, bootOptions))
-      .then(() => waitForApp(instance))
-      .then(() => {
-        return instance;
-      });
+          return instance.boot(bootOptions);
+        })
+        .then(() => result.instanceBooted = true)
+        .then(() => instance.visit(path, bootOptions))
+        .then(() => waitForApp(instance))
+        .then(() => {
+          scope.bootOptions = bootOptions;
+          scope.instance = instance;
+          return instance;
+        });
+    }
   }
 
   /**
-   * Creates a new application instance and renders the instance at a specific
+   * Creates a new application instance (on the first visit) and renders the instance at a specific
    * URL, returning a promise that resolves to a {@link Result}. The `Result`
-   * givesg you access to the rendered HTML as well as metadata about the
+   * gives you access to the rendered HTML as well as metadata about the
    * request such as the HTTP status code.
    *
    * If this call to `visit()` is to service an incoming HTTP request, you may
@@ -272,7 +296,7 @@ class EmberApp {
     let destroyAppInstanceInMs = options.destroyAppInstanceInMs;
 
     let shouldRender = (options.shouldRender !== undefined) ? options.shouldRender : true;
-    let bootOptions = buildBootOptions(shouldRender);
+    let bootOptions = this.bootOptions || buildBootOptions(shouldRender);
     let fastbootInfo = new FastBootInfo(
       req,
       res,
@@ -314,15 +338,10 @@ class EmberApp {
       .catch(error => result.error = error)
       .then(() => result._finalize())
       .finally(() => {
-        if (instance && !result.instanceDestroyed) {
-          result.instanceDestroyed = true;
-          instance.destroy();
-
-          if (destroyAppInstanceTimer) {
-            clearTimeout(destroyAppInstanceTimer);
-          }
+        if (destroyAppInstanceTimer) {
+          clearTimeout(destroyAppInstanceTimer);
         }
-      });
+      })
   }
 
   /**
@@ -441,7 +460,12 @@ function escapeJSONString(string) {
  * it into the application instance.
  */
 function registerFastBootInfo(info, instance) {
-  info.register(instance);
+  if (!instance.lookup('info:-fastboot')) {
+    info.register(instance);
+  } else {
+    instance.unregister('info:-fastboot');
+    info.register(instance);
+  }
 }
 
 module.exports = EmberApp;
