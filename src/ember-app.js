@@ -461,18 +461,6 @@ function registerFastBootInfo(info, instance) {
   } else {
     instance.get('__container__').lookup('service:fastboot').set('_fastbootInfo', info);
   }
-  console.log('info')
-  console.log(Object.keys(instance.application));
-  console.log(Object.keys(instance.__container__.lookup('info:-fastboot')));
-  console.log(Object.keys(instance.__container__.lookup('info:-fastboot').request));
-  console.log(instance.__container__.lookup('info:-fastboot').request.path);
-  console.log('service');
-  console.log(Object.keys(instance.application));
-  console.log(Object.keys(instance.__container__.lookup('service:fastboot')));
-  console.log(Object.keys(instance.__container__.lookup('service:fastboot').get('_fastbootInfo')));
-  console.log(instance.__container__.lookup('service:fastboot').get('_fastbootInfo').request.path);
-  console.log('end fastboot registerFastBootInfo Logs');
-  // console.log(instance.__container__.lookup('service:fastboot').request.path);
 }
 
 module.exports = EmberApp;
