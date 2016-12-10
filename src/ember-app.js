@@ -230,16 +230,13 @@ class EmberApp {
   visitRoute(path, fastbootInfo, bootOptions, result) {
     let instance;
     let scope = this;
-
     if (scope.instance) {
       instance = scope.instance;
-      result.instance = instance;
       registerFastBootInfo(fastbootInfo, instance);
       result.instanceBooted = true;
       return instance.visit(path, bootOptions)
         .then(() => {
           result.instance = instance;
-          registerFastBootInfo(fastbootInfo, instance);
         })
         .then(() => waitForApp(instance))
         .then(() => {
@@ -252,7 +249,6 @@ class EmberApp {
           instance = appInstance;
           result.instance = instance;
           registerFastBootInfo(fastbootInfo, instance);
-
           return instance.boot(bootOptions);
         })
         .then(() => result.instanceBooted = true)
@@ -463,9 +459,20 @@ function registerFastBootInfo(info, instance) {
   if (!instance.lookup('info:-fastboot')) {
     info.register(instance);
   } else {
-    instance.unregister('info:-fastboot');
-    info.register(instance);
+    instance.get('__container__').lookup('service:fastboot').set('_fastbootInfo', info);
   }
+  console.log('info')
+  console.log(Object.keys(instance.application));
+  console.log(Object.keys(instance.__container__.lookup('info:-fastboot')));
+  console.log(Object.keys(instance.__container__.lookup('info:-fastboot').request));
+  console.log(instance.__container__.lookup('info:-fastboot').request.path);
+  console.log('service');
+  console.log(Object.keys(instance.application));
+  console.log(Object.keys(instance.__container__.lookup('service:fastboot')));
+  console.log(Object.keys(instance.__container__.lookup('service:fastboot').get('_fastbootInfo')));
+  console.log(instance.__container__.lookup('service:fastboot').get('_fastbootInfo').request.path);
+  console.log('end fastboot registerFastBootInfo Logs');
+  // console.log(instance.__container__.lookup('service:fastboot').request.path);
 }
 
 module.exports = EmberApp;
