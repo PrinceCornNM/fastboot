@@ -1,5 +1,13 @@
 # FastBoot Changelog
 
+### 1.0.0-rc.3
+
+* Remove Node 0.12 support.
+
+### 1.0.0-rc.2
+
+* Set the entry point to the built cjs
+
 ### 1.0.0-beta.5
 
 * Only access instance.getURL if the instance has booted

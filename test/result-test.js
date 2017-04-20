@@ -1,7 +1,6 @@
 var expect = require('chai').expect;
-var alchemistRequire = require('broccoli-module-alchemist/require');
-var Result = alchemistRequire('result.js');
-var FastBootInfo = alchemistRequire('fastboot-info.js');
+var Result = require('./../src/result.js');
+var FastBootInfo = require('./../src/fastboot-info.js');
 var SimpleDOM = require('simple-dom');
 
 describe('Result', function() {
@@ -78,6 +77,24 @@ describe('Result', function() {
         return result.html()
         .then(function (result) {
           expect(result).to.include(HEAD);
+          expect(result).to.include(BODY);
+        });
+      });
+    });
+
+    describe('when the document has special-case content', function () {
+      var BODY = '<h1>A special response document: $$</h1>';
+
+      beforeEach(function () {
+        doc.body.appendChild(doc.createRawHTMLSection(BODY));
+
+        result._fastbootInfo.response.statusCode = 418;
+        result._finalize();
+      });
+
+      it('it should handle \'$$\' correctly (due to `String.replace()` gotcha)', function () {
+        return result.html()
+        .then(function (result) {
           expect(result).to.include(BODY);
         });
       });

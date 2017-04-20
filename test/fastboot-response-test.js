@@ -1,7 +1,6 @@
 var expect = require('chai').expect;
-var alchemistRequire = require('broccoli-module-alchemist/require');
-var FastBootHeaders = alchemistRequire('fastboot-headers.js');
-var FastBootResponse = alchemistRequire('fastboot-response.js');
+var FastBootHeaders = require('./../src/fastboot-headers.js');
+var FastBootResponse = require('./../src/fastboot-response.js');
 
 describe("FastBootResponse", function() {
   var fastBootResponse;
@@ -9,7 +8,7 @@ describe("FastBootResponse", function() {
   beforeEach(function () {
     var mockResponse = {
       _headers: {
-        "i-am-a": "mock header, me too",
+        "i-am-a": ["mock header", "me too"],
         "cookie": ""
       }
     };

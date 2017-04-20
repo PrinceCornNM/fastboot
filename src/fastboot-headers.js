@@ -1,3 +1,5 @@
+'use strict';
+
 // Partially implements Headers from the Fetch API
 // https://developer.mozilla.org/en-US/docs/Web/API/Headers
 function FastBootHeaders(headers) {
@@ -5,7 +7,17 @@ function FastBootHeaders(headers) {
   this.headers = {};
 
   for (var header in headers) {
-    this.headers[header] = headers[header].split(', ');
+    let value = headers[header];
+
+    // Express gives us either a string
+    // or an array of strings if there are multiple values.
+    // We want to support the Header spec
+    // so we will coerce to an array always.
+    if (typeof value === 'string') {
+      value = [value];
+    }
+
+    this.headers[header] = value;
   }
 }
 

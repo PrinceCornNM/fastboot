@@ -1,12 +1,11 @@
 'use strict';
 
-const expect           = require('chai').expect;
-const fs               = require('fs');
-const path             = require('path');
-const fixture          = require('./helpers/fixture-path');
-const alchemistRequire = require('broccoli-module-alchemist/require');
-const FastBoot         = alchemistRequire('index');
-const CustomSandbox    = require('./fixtures/custom-sandbox/custom-sandbox');
+const expect = require('chai').expect;
+const fs = require('fs');
+const path = require('path');
+const fixture = require('./helpers/fixture-path');
+const FastBoot = require('./../src/index');
+const CustomSandbox = require('./fixtures/custom-sandbox/custom-sandbox');
 
 describe("FastBoot", function() {
   it("throws an exception if no distPath is provided", function() {
@@ -28,6 +27,17 @@ describe("FastBoot", function() {
     expect(fn).to.throw(/Couldn't find (.+)\/fixtures\/no-package-json/);
   });
 
+  it('throws an error when manifest schema version is higher than fastboot schema version', function() {
+    var distPath = fixture('higher-schema-version');
+    var fn = function() {
+      return new FastBoot({
+        distPath: distPath
+      });
+    };
+
+    expect(fn).to.throw(/An incompatible version between `ember-cli-fastboot` and `fastboot` was found/);
+  });
+
   it("doesn't throw an exception if a package.json is provided", function() {
     var distPath = fixture('empty-package-json');
     var fn = function() {
@@ -42,6 +52,18 @@ describe("FastBoot", function() {
   it("can render HTML", function() {
     var fastboot = new FastBoot({
       distPath: fixture('basic-app')
+    });
+
+    return fastboot.visit('/')
+      .then(r => r.html())
+      .then(html => {
+        expect(html).to.match(/Welcome to Ember/);
+      });
+  });
+
+  it("can render HTML with array of app files defined in package.json", function() {
+    var fastboot = new FastBoot({
+      distPath: fixture('multiple-app-files')
     });
 
     return fastboot.visit('/')
@@ -176,6 +198,62 @@ describe("FastBoot", function() {
     function hotReloadApp() {
       fastboot.reload({
         distPath: fixture('hot-swap-app')
+      });
+    }
+  });
+
+  it("can reload the app using the same sandboxGlobals", function() {
+    var fastboot = new FastBoot({
+      distPath: fixture('basic-app'),
+      sandboxGlobals: {
+        foo: 5,
+        najax: 'undefined',
+        myVar: 'undefined'
+      }
+    });
+
+    return fastboot.visit('/')
+      .then(r => r.html())
+      .then(html => expect(html).to.match(/Welcome to Ember/))
+      .then(hotReloadApp)
+      .then(() => fastboot.visit('/foo'))
+      .then(r => r.html())
+      .then((html) => {
+        expect(html).to.match(/foo from sandbox: 5/);
+        expect(html).to.match(/najax in sandbox: undefined/);
+      });
+
+    function hotReloadApp() {
+      fastboot.reload({
+        distPath: fixture('custom-sandbox')
+      });
+    }
+  });
+
+  it("can reload the app using the same sandbox class", function() {
+    var fastboot = new FastBoot({
+      distPath: fixture('basic-app'),
+      sandbox: CustomSandbox,
+      sandboxGlobals: {
+        myVar: 2,
+        foo: 'undefined',
+        najax: 'undefined'
+      }
+    });
+
+    return fastboot.visit('/')
+      .then(r => r.html())
+      .then(html => expect(html).to.match(/Welcome to Ember/))
+      .then(hotReloadApp)
+      .then(() => fastboot.visit('/foo'))
+      .then(r => r.html())
+      .then((html) => {
+        expect(html).to.match(/myVar in sandbox: 2/);
+      });
+
+    function hotReloadApp() {
+      fastboot.reload({
+        distPath: fixture('custom-sandbox')
       });
     }
   });

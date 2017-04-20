@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const RSVP = require('rsvp');
+const chalk = require('chalk');
 
 const najax = require('najax');
 const SimpleDOM = require('simple-dom');
@@ -11,6 +12,7 @@ const debug = require('debug')('fastboot:ember-app');
 
 const FastBootInfo = require('./fastboot-info');
 const Result = require('./result');
+const FastBootSchemaVersions = require('./fastboot-schema-versions');
 
 /**
  * @private
@@ -32,8 +34,8 @@ class EmberApp {
     let distPath = path.resolve(options.distPath);
     let config = this.readPackageJSON(distPath);
 
-    this.appFilePath = config.appFile;
-    this.vendorFilePath = config.vendorFile;
+    this.appFilePaths = config.appFiles;
+    this.vendorFilePaths = config.vendorFiles;
     this.moduleWhitelist = config.moduleWhitelist;
     this.hostWhitelist = config.hostWhitelist;
     this.appConfig = config.appConfig;
@@ -58,7 +60,6 @@ class EmberApp {
    * @param {Object} [sandboxGlobals={}] any additional variables to expose in the sandbox or override existing in the sandbox
    */
   buildSandbox(distPath, sandboxClass, sandboxGlobals) {
-    let Sandbox = sandboxClass || require('./vm-sandbox');
     let sandboxRequire = this.buildWhitelistedRequire(this.moduleWhitelist, distPath);
     let config = this.appConfig;
     function appConfig() {
@@ -79,7 +80,7 @@ class EmberApp {
       }
     }
 
-    return new Sandbox({
+    return new sandboxClass({
       globals: globals
     });
   }
@@ -128,21 +129,26 @@ class EmberApp {
   */
   loadAppFiles() {
     let sandbox = this.sandbox;
-    let appFilePath = this.appFilePath;
-    let vendorFilePath = this.vendorFilePath;
+    let appFilePaths = this.appFilePaths;
+    let vendorFilePaths = this.vendorFilePaths;
 
     sandbox.eval('sourceMapSupport.install(Error);');
 
-    let appFile = fs.readFileSync(appFilePath, 'utf8');
-    let vendorFile = fs.readFileSync(vendorFilePath, 'utf8');
+    debug("evaluating app and vendor files");
 
-    debug("evaluating app; app=%s; vendor=%s", appFilePath, vendorFilePath);
-
-    sandbox.eval(vendorFile, vendorFilePath);
+    vendorFilePaths.forEach(function(vendorFilePath) {
+      debug("evaluating vendor file %s", vendorFilePath);
+      let vendorFile = fs.readFileSync(vendorFilePath, 'utf8');
+      sandbox.eval(vendorFile, vendorFilePath);
+    });
     debug("vendor file evaluated");
 
-    sandbox.eval(appFile, appFilePath);
-    debug("app file evaluated");
+    appFilePaths.forEach(function(appFilePath) {
+      debug("evaluating app file %s", appFilePath);
+      let appFile = fs.readFileSync(appFilePath, 'utf8');
+      sandbox.eval(appFile, appFilePath);
+    });
+    debug("app files evaluated");
   }
 
   /**
@@ -153,7 +159,6 @@ class EmberApp {
    */
   createEmberApp() {
     let sandbox = this.sandbox;
-    let appFilePath = this.appFilePath;
 
     // Retrieve the application factory from within the sandbox
     let AppFactory = sandbox.run(function(ctx) {
@@ -162,7 +167,7 @@ class EmberApp {
 
     // If the application factory couldn't be found, throw an error
     if (!AppFactory || typeof AppFactory['default'] !== 'function') {
-      throw new Error('Failed to load Ember app from ' + appFilePath + ', make sure it was built for FastBoot with the `ember fastboot:build` command.');
+      throw new Error('Failed to load Ember app from app.js, make sure it was built for FastBoot with the `ember fastboot:build` command.');
     }
 
     // Otherwise, return a new `Ember.Application` instance
@@ -355,23 +360,62 @@ class EmberApp {
     }
 
     let manifest;
+    let schemaVersion;
     let pkg;
 
     try {
       pkg = JSON.parse(file);
       manifest = pkg.fastboot.manifest;
+      schemaVersion = pkg.fastboot.schemaVersion;
     } catch (e) {
       throw new Error(`${pkgPath} was malformed or did not contain a manifest. Ensure that you have a compatible version of ember-cli-fastboot.`);
     }
 
+    const currentSchemaVersion = FastBootSchemaVersions.latest;
+    // set schema version to 1 if not defined
+    schemaVersion = schemaVersion || FastBootSchemaVersions.base;
+    debug('Current schemaVersion from `ember-cli-fastboot` is %s while latest schema version is %s', (schemaVersion, currentSchemaVersion));
+
+    if (schemaVersion > currentSchemaVersion) {
+      let errorMsg = chalk.bold.red('An incompatible version between `ember-cli-fastboot` and `fastboot` was found. Please update the version of fastboot library that is compatible with ember-cli-fastboot.');
+      throw new Error(errorMsg);
+    }
+
+    if (schemaVersion < FastBootSchemaVersions.manifestFileArrays) {
+      // transform app and vendor file to array of files
+      manifest = this.transformManifestFiles(manifest);
+    }
+
+    var appFiles = [];
+    debug("reading array of app file paths from manifest");
+    manifest.appFiles.forEach(function(appFile) {
+      appFiles.push(path.join(distPath, appFile));
+    });
+
+    var vendorFiles = [];
+    debug("reading array of vendor file paths from manifest");
+    manifest.vendorFiles.forEach(function(vendorFile) {
+      vendorFiles.push(path.join(distPath, vendorFile));
+    });
+
     return {
-      appFile:  path.join(distPath, manifest.appFile),
-      vendorFile: path.join(distPath, manifest.vendorFile),
+      appFiles:  appFiles,
+      vendorFiles: vendorFiles,
       htmlFile: path.join(distPath, manifest.htmlFile),
       moduleWhitelist: pkg.fastboot.moduleWhitelist,
       hostWhitelist: pkg.fastboot.hostWhitelist,
       appConfig: pkg.fastboot.appConfig
     };
+  }
+
+  /**
+   * Function to transform the manifest app and vendor files to an array.
+   */
+  transformManifestFiles(manifest) {
+    manifest.appFiles = [manifest.appFile];
+    manifest.vendorFiles = [manifest.vendorFile];
+
+    return manifest;
   }
 }
 
